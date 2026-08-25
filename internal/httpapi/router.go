@@ -89,7 +89,7 @@ func writeErr(w http.ResponseWriter, err error) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
 	case errors.Is(err, model.ErrConflict), errors.Is(err, model.ErrFrozenVersion):
 		writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
-	case errors.Is(err, model.ErrBadState):
+	case errors.Is(err, model.ErrBadState), errors.As(err, new(*model.StateTransitionError)):
 		writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
 	case errors.Is(err, model.ErrValidation), errors.Is(err, model.ErrInvalidGeometry),
 		errors.Is(err, model.ErrRegionOutOfBounds), errors.Is(err, model.ErrSelfIntersecting),

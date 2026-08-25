@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"task234-thinsect/internal/service"
@@ -41,5 +42,24 @@ func TestRouterExposesHealthAndBatchCreation(t *testing.T) {
 	}
 	if got.ID == 0 || got.Status != "importing" {
 		t.Fatalf("unexpected created batch: %+v", got)
+	}
+}
+
+func TestRouterMapsStateTransitionErrorsToConflict(t *testing.T) {
+	db, err := store.Open(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+	app := service.New(db)
+	batch, err := app.CreateBatch("HTTP-STATE", "basalt", "field")
+	if err != nil {
+		t.Fatalf("create batch: %v", err)
+	}
+	body := bytes.NewBufferString(`{"to":"review"}`)
+	rr := httptest.NewRecorder()
+	New(app).ServeHTTP(rr, httptest.NewRequest(http.MethodPost, "/api/batches/"+strconv.FormatInt(batch.ID, 10)+"/advance", body))
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("state transition status = %d, want 409: %s", rr.Code, rr.Body.String())
 	}
 }
