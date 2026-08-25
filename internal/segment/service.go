@@ -209,26 +209,31 @@ func (s *Service) Split(in SplitInput) ([]model.Region, error) {
 			return nil, fmt.Errorf("part %d: %w", i, model.ErrRegionOutOfBounds)
 		}
 	}
-	// 原区域标记 mismerged 保持证据；子区域候选状态。
-	if err := s.regions.UpdateStatus(in.RegionID, model.RegionMismerged); err != nil {
-		return nil, err
-	}
+	// 原区域标记 mismerged 与全部子区域写入同一事务，失败时整体回滚。
 	var out []model.Region
-	for i, p := range in.Parts {
-		r := model.Region{
-			BatchID:        parent.BatchID,
-			ImageID:        parent.ImageID,
-			Label:          fmt.Sprintf("%s-%d", parent.Label, i+1),
-			MineralCode:    "",
-			Status:         model.RegionCandidate,
-			ParentRegionID: &parent.ID,
-			Polygon:        p,
+	if err := s.regions.WithTx(func(tx *store.RegionTx) error {
+		if err := tx.UpdateStatus(in.RegionID, model.RegionMismerged); err != nil {
+			return err
 		}
-		created, err := s.regions.Create(r)
-		if err != nil {
-			return out, err
+		for i, p := range in.Parts {
+			r := model.Region{
+				BatchID:        parent.BatchID,
+				ImageID:        parent.ImageID,
+				Label:          fmt.Sprintf("%s-%d", parent.Label, i+1),
+				MineralCode:    "",
+				Status:         model.RegionCandidate,
+				ParentRegionID: &parent.ID,
+				Polygon:        p,
+			}
+			created, err := tx.Create(r)
+			if err != nil {
+				return err
+			}
+			out = append(out, created)
 		}
-		out = append(out, created)
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 	return out, nil
 }

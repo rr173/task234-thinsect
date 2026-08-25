@@ -11,8 +11,24 @@ import (
 // RegionStore 持久化矿物区域（含多边形几何 JSON、特征与拆分来源）。
 type RegionStore struct{ db *sql.DB }
 
+// RegionTx 是区域拆分事务内的受控写句柄。
+type RegionTx struct{ tx *sql.Tx }
+
 // NewRegionStore 创建区域 store。
 func NewRegionStore(db *sql.DB) *RegionStore { return &RegionStore{db: db} }
+
+// WithTx 在同一事务中提交父区域状态和全部子区域。
+func (s *RegionStore) WithTx(fn func(tx *RegionTx) error) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	if err := fn(&RegionTx{tx: tx}); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	return tx.Commit()
+}
 
 const regionCols = `id, batch_id, image_id, label, mineral_code, status, area, perimeter,
 	avg_r, avg_g, avg_b, extinction_ratio, ext_angle, parent_region_id, polygon_json, created_at, updated_at`
@@ -40,6 +56,12 @@ func scanRegion(row interface{ Scan(...any) error }) (model.Region, error) {
 
 // Create 写入区域；自动计算面积与周长。
 func (s *RegionStore) Create(r model.Region) (model.Region, error) {
+	return createRegion(s.db, r)
+}
+
+func createRegion(exec interface {
+	Exec(query string, args ...any) (sql.Result, error)
+}, r model.Region) (model.Region, error) {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	r.Area = r.Polygon.Area()
 	r.Perimeter = r.Polygon.Perimeter()
@@ -47,7 +69,7 @@ func (s *RegionStore) Create(r model.Region) (model.Region, error) {
 	if r.ParentRegionID != nil {
 		parent = *r.ParentRegionID
 	}
-	res, err := s.db.Exec(`INSERT INTO regions(batch_id,image_id,label,mineral_code,status,area,perimeter,
+	res, err := exec.Exec(`INSERT INTO regions(batch_id,image_id,label,mineral_code,status,area,perimeter,
 			avg_r,avg_g,avg_b,extinction_ratio,ext_angle,parent_region_id,polygon_json,created_at,updated_at)
 		VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		r.BatchID, r.ImageID, r.Label, r.MineralCode, r.Status, r.Area, r.Perimeter,
@@ -59,6 +81,24 @@ func (s *RegionStore) Create(r model.Region) (model.Region, error) {
 	r.CreatedAt, _ = time.Parse(time.RFC3339Nano, now)
 	r.UpdatedAt = r.CreatedAt
 	return r, nil
+}
+
+// UpdateStatusTx 在拆分事务中更新父区域状态。
+func (t *RegionTx) UpdateStatus(id int64, status string) error {
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	res, err := t.tx.Exec(`UPDATE regions SET status=?, updated_at=? WHERE id=?`, status, now, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return model.ErrNotFound
+	}
+	return nil
+}
+
+// Create 在拆分事务中写入子区域。
+func (t *RegionTx) Create(r model.Region) (model.Region, error) {
+	return createRegion(t.tx, r)
 }
 
 // Get 按 ID 获取区域。
