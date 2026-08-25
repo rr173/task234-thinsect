@@ -68,7 +68,8 @@ func (s *Service) ListOpinions(regionID int64) ([]model.Opinion, error) {
 	return s.opinions.ListByRegion(regionID)
 }
 
-// CreateVersion 创建解释版本草稿；批次须处于 review 阶段。
+// CreateVersion 创建解释版本草稿；批次须处于 review 或 published 阶段。
+// published 阶段允许创建下一版解释，以便冻结时替代旧冻结版本。
 func (s *Service) CreateVersion(batchID int64, name, summary string) (model.InterpretationVersion, error) {
 	if name == "" {
 		return model.InterpretationVersion{}, model.ErrValidation
@@ -77,7 +78,7 @@ func (s *Service) CreateVersion(batchID int64, name, summary string) (model.Inte
 	if err != nil {
 		return model.InterpretationVersion{}, err
 	}
-	if batch.Status != model.BatchReview {
+	if batch.Status != model.BatchReview && batch.Status != model.BatchPublished {
 		return model.InterpretationVersion{}, model.ErrBadState
 	}
 	return s.versions.Create(model.InterpretationVersion{
@@ -127,7 +128,9 @@ func (s *Service) FreezeVersion(id int64) (model.InterpretationVersion, error) {
 	}
 	// 批次进入已发布态。
 	if batch.Status == model.BatchReview {
-		_ = s.batches.UpdateStatus(batch.ID, model.BatchPublished)
+		if err := s.batches.UpdateStatus(batch.ID, model.BatchPublished); err != nil {
+			return v, err
+		}
 	}
 	return s.versions.Get(v.ID)
 }
