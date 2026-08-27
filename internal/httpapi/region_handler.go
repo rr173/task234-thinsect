@@ -168,9 +168,6 @@ func (a *API) splitRegion(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
-	for i := range created {
-		created[i].ParentRegionID = nil
-	}
 	writeJSON(w, http.StatusCreated, created)
 }
 

@@ -222,7 +222,7 @@ func (s *Service) Split(in SplitInput) ([]model.Region, error) {
 				Label:          fmt.Sprintf("%s-%d", parent.Label, i+1),
 				MineralCode:    "",
 				Status:         model.RegionCandidate,
-				ParentRegionID: nil,
+				ParentRegionID: &parent.ID,
 				Polygon:        p,
 			}
 			created, err := tx.Create(r)

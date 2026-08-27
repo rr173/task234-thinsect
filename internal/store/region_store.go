@@ -62,7 +62,6 @@ func (s *RegionStore) Create(r model.Region) (model.Region, error) {
 func createRegion(exec interface {
 	Exec(query string, args ...any) (sql.Result, error)
 }, r model.Region) (model.Region, error) {
-	r.ParentRegionID = nil
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	r.Area = r.Polygon.Area()
 	r.Perimeter = r.Polygon.Perimeter()
