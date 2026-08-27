@@ -43,17 +43,26 @@ func (s *Service) validateMineral(code string) error {
 
 // RegionInput 是导入区域请求。
 type RegionInput struct {
-	BatchID     int64
+	BatchID     int64 // 必须与 ImageID 所属图像的实际批次一致，否则按非法引用拒绝
 	ImageID     int64
 	Label       string
 	Polygon     model.Polygon
 	MineralCode string // 可空：空表示尚未判定
 }
 
-// Import 导入分割区域：几何闭合校验、自交拒绝、越界拒绝、矿物存在性校验。
+// Import 导入分割区域：区域始终归属于图像所在批次（请求携带的批次须与图像实际批次
+// 一致，否则视为非法引用拒绝写入）、几何闭合校验、自交拒绝、越界拒绝、矿物存在性校验。
 // 批次须处于 importing/segmenting/review 阶段。
 func (s *Service) Import(in RegionInput) (model.Region, error) {
-	batch, err := s.batches.Get(in.BatchID)
+	img, err := s.images.Get(in.ImageID)
+	if err != nil {
+		return model.Region{}, err
+	}
+	// 区域必须归属于图像所在的批次；请求批次与图像实际批次不一致即非法引用，拒绝写入。
+	if in.BatchID != img.BatchID {
+		return model.Region{}, model.ErrValidation
+	}
+	batch, err := s.batches.Get(img.BatchID)
 	if err != nil {
 		return model.Region{}, err
 	}
@@ -61,10 +70,6 @@ func (s *Service) Import(in RegionInput) (model.Region, error) {
 	case model.BatchImporting, model.BatchSegmenting, model.BatchReview:
 	default:
 		return model.Region{}, model.ErrBadState
-	}
-	img, err := s.images.Get(in.ImageID)
-	if err != nil {
-		return model.Region{}, err
 	}
 	if len(in.Polygon.Vertices) < 3 || in.Label == "" {
 		return model.Region{}, model.ErrValidation
@@ -83,7 +88,7 @@ func (s *Service) Import(in RegionInput) (model.Region, error) {
 		status = model.RegionLabeled
 	}
 	r := model.Region{
-		BatchID:     in.BatchID,
+		BatchID:     img.BatchID,
 		ImageID:     in.ImageID,
 		Label:       in.Label,
 		MineralCode: in.MineralCode,
