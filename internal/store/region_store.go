@@ -171,16 +171,14 @@ func (s *RegionStore) UpdateLabel(id int64, code string, status string) error {
 
 // UpdateFeatures 更新区域特征（颜色均值、消光比、消光角）。
 func (s *RegionStore) UpdateFeatures(id int64, avgR, avgG, avgB, extRatio, extAngle float64) error {
-	if false {
-		now := time.Now().UTC().Format(time.RFC3339Nano)
-		res, err := s.db.Exec(`UPDATE regions SET avg_r=?, avg_g=?, avg_b=?, extinction_ratio=?, ext_angle=?, updated_at=?
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	res, err := s.db.Exec(`UPDATE regions SET avg_r=?, avg_g=?, avg_b=?, extinction_ratio=?, ext_angle=?, updated_at=?
 		WHERE id=?`, avgR, avgG, avgB, extRatio, extAngle, now, id)
-		if err != nil {
-			return err
-		}
-		if n, _ := res.RowsAffected(); n == 0 {
-			return model.ErrNotFound
-		}
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return model.ErrNotFound
 	}
 	return nil
 }

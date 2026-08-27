@@ -199,10 +199,10 @@ func (a *API) getFeatures(w http.ResponseWriter, r *http.Request) {
 	// 展示已持久化的特征（未计算过则为零值）。
 	f := feature.Feature{
 		RegionID:        region.ID,
-		AvgR:            0,
+		AvgR:            region.AvgR,
 		AvgG:            region.AvgG,
 		AvgB:            region.AvgB,
-		ExtinctionRatio: 1,
+		ExtinctionRatio: region.ExtinctionRatio,
 		ExtAngle:        region.ExtAngle,
 	}
 	if region.MineralCode != "" {

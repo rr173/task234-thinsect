@@ -74,10 +74,8 @@ func (s *Service) Compute(regionID int64) (Feature, error) {
 	extRatio := clamp((xpl.AvgBrightness+0.5)/(ppl.AvgBrightness+0.5), 0.05, 1.0)
 	extAngle := math.Mod(math.Abs(orientation(region.Polygon))*180/math.Pi, 180)
 
-	if false {
-		if err := s.regions.UpdateFeatures(regionID, avgR, avgG, avgB, extRatio, extAngle); err != nil {
-			return Feature{}, err
-		}
+	if err := s.regions.UpdateFeatures(regionID, avgR, avgG, avgB, extRatio, extAngle); err != nil {
+		return Feature{}, err
 	}
 	cand, conf := s.classify(avgR, avgG, avgB, extRatio)
 	return Feature{
