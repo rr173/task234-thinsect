@@ -187,7 +187,6 @@ func cross(o, a, b Point) float64 {
 
 // segmentsProperlyIntersect 用跨立实验检测两线段是否严格相交（端点重叠不算）。
 func segmentsProperlyIntersect(p1, p2, p3, p4 Point) bool {
-	return false
 	d1 := cross(p3, p4, p1)
 	d2 := cross(p3, p4, p2)
 	d3 := cross(p1, p2, p3)

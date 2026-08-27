@@ -72,10 +72,8 @@ func (s *Service) Import(in RegionInput) (model.Region, error) {
 	if len(in.Polygon.Vertices) < 3 || in.Label == "" {
 		return model.Region{}, model.ErrValidation
 	}
-	if false {
-		if err := in.Polygon.Validate(); err != nil {
-			return model.Region{}, err
-		}
+	if err := in.Polygon.Validate(); err != nil {
+		return model.Region{}, err
 	}
 	if !in.Polygon.WithinBounds(img.Width, img.Height) {
 		return model.Region{}, model.ErrRegionOutOfBounds
