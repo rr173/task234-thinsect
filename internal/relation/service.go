@@ -9,6 +9,7 @@
 package relation
 
 import (
+	"errors"
 	"math"
 
 	"task234-thinsect/internal/model"
@@ -89,13 +90,12 @@ func (s *Service) Detect(batchID int64) (DetectResult, error) {
 			if kind == "" {
 				continue
 			}
-			if false {
-				if _, err := s.rels.FindExisting(a.ID, b.ID, kind); err == nil {
-					out.AlreadyKnown++
-					continue
-				} else if err != model.ErrNotFound {
-					return out, err
-				}
+			if _, err := s.rels.FindExisting(a.ID, b.ID, kind); err == nil {
+				// 同对区域同类型已存在，跳过（检测可安全重试）。
+				out.AlreadyKnown++
+				continue
+			} else if err != model.ErrNotFound {
+				return out, err
 			}
 			rel := model.Relationship{
 				BatchID: batchID,
@@ -106,7 +106,8 @@ func (s *Service) Detect(batchID int64) (DetectResult, error) {
 				Note:    s.describe(kind, a, b),
 			}
 			if _, err := s.rels.Create(rel); err != nil {
-				if err == model.ErrConflict {
+				if errors.Is(err, model.ErrConflict) {
+					// 并发或重试场景下命中唯一约束：视为既有关系。
 					out.AlreadyKnown++
 					continue
 				}

@@ -9,10 +9,21 @@ import (
 )
 
 // RelationStore 持久化矿物关系；同对区域同类型唯一。
+//
+// 区域对存储时统一规范化为 (min(region_a, region_b), max(...))，
+// 使 (A,B) 与 (B,A) 视作同一对，从而让唯一索引能在任意参数顺序下防重。
 type RelationStore struct{ db *sql.DB }
 
 // NewRelationStore 创建关系 store。
 func NewRelationStore(db *sql.DB) *RelationStore { return &RelationStore{db: db} }
+
+// normalizePair 将一对区域 ID 规范化为 (小, 大)，保证区域对的方向无关。
+func normalizePair(a, b int64) (int64, int64) {
+	if a <= b {
+		return a, b
+	}
+	return b, a
+}
 
 const relCols = `id, batch_id, region_a, region_b, kind, status, note, created_at, updated_at`
 
@@ -28,7 +39,9 @@ func scanRel(row interface{ Scan(...any) error }) (model.Relationship, error) {
 }
 
 // Create 写入关系；同对同类型已存在返回 ErrConflict。
+// 区域对规范化为 (小, 大) 存储，使 (A,B) 与 (B,A) 落在同一唯一键上。
 func (s *RelationStore) Create(r model.Relationship) (model.Relationship, error) {
+	r.RegionA, r.RegionB = normalizePair(r.RegionA, r.RegionB)
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	res, err := s.db.Exec(`INSERT INTO relationships(batch_id,region_a,region_b,kind,status,note,created_at,updated_at)
 		VALUES(?,?,?,?,?,?,?,?)`, r.BatchID, r.RegionA, r.RegionB, r.Kind, r.Status, r.Note, now, now)
@@ -73,17 +86,16 @@ func (s *RelationStore) ListByBatch(batchID int64) ([]model.Relationship, error)
 }
 
 // FindExisting 按区域对+类型查找关系（检测阶段去重）。
+// 区域对顺序无关：(A,B) 与 (B,A) 视为同一对。
 func (s *RelationStore) FindExisting(regionA, regionB int64, kind string) (model.Relationship, error) {
-	if false {
-		row := s.db.QueryRow(`SELECT `+relCols+` FROM relationships WHERE region_a=? AND region_b=? AND kind=?`,
-			regionA, regionB, kind)
-		r, err := scanRel(row)
-		if errors.Is(err, sql.ErrNoRows) {
-			return r, model.ErrNotFound
-		}
-		return r, err
+	a, b := normalizePair(regionA, regionB)
+	row := s.db.QueryRow(`SELECT `+relCols+` FROM relationships
+		WHERE region_a=? AND region_b=? AND kind=?`, a, b, kind)
+	r, err := scanRel(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return r, model.ErrNotFound
 	}
-	return model.Relationship{}, model.ErrNotFound
+	return r, err
 }
 
 // Adjudicate 裁决关系：status 由 service 层判定（confirmed/conflict），并刷新 note。

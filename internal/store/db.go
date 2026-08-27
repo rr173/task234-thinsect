@@ -83,7 +83,8 @@ func migrate(db *sql.DB) error {
 			status TEXT NOT NULL,
 			note TEXT NOT NULL DEFAULT '',
 			created_at DATETIME NOT NULL,
-			updated_at DATETIME NOT NULL
+			updated_at DATETIME NOT NULL,
+			UNIQUE(region_a, region_b, kind)
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_rels_batch ON relationships(batch_id)`,
 		`CREATE TABLE IF NOT EXISTS opinions (
